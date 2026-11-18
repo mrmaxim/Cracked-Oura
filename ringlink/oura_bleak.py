@@ -180,7 +180,7 @@ def record_stage(stage):
 def ensure_idle():
     # Refuse even stale locks here: resolve them before a factory reset, not
     # halfway through onboarding. Do not kill the user's processes.
-    if (HERE / ".daemon.lock").exists() or (HERE / ".sync.lock").exists():
+    if any((HERE / name).exists() for name in ('.daemon.lock', '.sync.lock', '.online_probe.lock')):
         raise RuntimeError("Stop the ring daemon/sync and resolve its lock before onboarding.")
 
 
