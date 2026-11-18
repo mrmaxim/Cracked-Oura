@@ -178,6 +178,29 @@ class OuraProtocol:
                               done=lambda t, p: t == 0x09)
         return self.find(frames, 0x09)
 
+    def feature_status(self, feature):
+        """Read GetFeatureStatus (0x20); no changes to measurement settings."""
+        replies = self.request(bytes([0x2F, 0x02, 0x20, feature]),
+                               done=lambda t, p: t == 0x2F and p[:2] == bytes([0x21, feature]))
+        p = next((p for t, p, raw in replies
+                  if t == 0x2F and p[:2] == bytes([0x21, feature])), None)
+        if p is None or len(p) < 6:
+            raise RuntimeError(f"Missing feature-status response for 0x{feature:02x}")
+        return dict(feature=feature, mode=p[2], status=p[3], state=p[4], subscription=p[5])
+
+    def set_feature_mode(self, feature, mode):
+        """Set mode, require a successful acknowledgement AND read-back."""
+        replies = self.request(bytes([0x2F, 0x03, 0x22, feature, mode]),
+                               done=lambda t, p: t == 0x2F and p[:2] == bytes([0x23, feature]))
+        p = next((p for t, p, raw in replies
+                  if t == 0x2F and p[:2] == bytes([0x23, feature])), None)
+        if p is None or len(p) < 3 or p[2] != 0:
+            raise RuntimeError(f"SetFeatureMode rejected or unacknowledged for 0x{feature:02x}")
+        status = self.feature_status(feature)
+        if status['mode'] != mode:
+            raise RuntimeError(f"Feature 0x{feature:02x} did not retain requested mode {mode}")
+        return status
+
     def battery(self):
         frames = self.request(frame(0x0C), done=lambda t, p: t == 0x0D)
         return self.find(frames, 0x0D)

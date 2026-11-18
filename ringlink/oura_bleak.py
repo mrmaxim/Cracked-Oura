@@ -23,6 +23,7 @@ SERVICE = "98ed0001-a541-11e4-b6a0-0002a5d5c51b"
 WRITE = "98ed0002-a541-11e4-b6a0-0002a5d5c51b"
 NOTIFY = "98ed0003-a541-11e4-b6a0-0002a5d5c51b"
 PAIR_STATE = HERE / "native_pairing.json"
+MEASUREMENT_FEATURES = {2: 'daytime_hr', 3: 'activity_hr', 4: 'spo2'}
 
 
 async def discover(seconds=10):
@@ -229,7 +230,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--address", help="Target address from scan (only needed with multiple rings)")
     ap.add_argument("--verbose", action="store_true", help="Frame metadata only; no keys or proofs")
-    ap.add_argument("command", choices=["scan", "pair", "verify", "battery", "events"])
+    ap.add_argument("command", choices=["scan", "pair", "verify", "battery", "events",
+                                       "features", "prepare-offline"])
     ap.add_argument("--factory-reset-done", action="store_true",
                     help="Confirm you manually reset the ring and closed the phone app")
     args = ap.parse_args(argv)
@@ -263,6 +265,24 @@ def main(argv=None):
             print(f"[auth] OK; battery {battery[0]}%")
             if args.command == "verify":
                 record_stage("verified_after_reconnect")
+        elif args.command in ("features", "prepare-offline"):
+            report = {"time": time.time(), "features": {}}
+            if args.command == "prepare-offline":
+                ring.sync_time()
+                ring.engage_data_plane()
+            for feature, name in MEASUREMENT_FEATURES.items():
+                before = ring.feature_status(feature)
+                print(f"[feature] {name}: {json.dumps(before)}")
+                after = before
+                if args.command == "prepare-offline" and before['mode'] != 1:
+                    after = ring.set_feature_mode(feature, 1)  # AUTOMATIC, not connected-live.
+                    print(f"[feature] {name}: automatic mode verified")
+                report['features'][name] = {"before": before, "after": after}
+            if args.command == "prepare-offline":
+                report['battery'] = ring.battery()[0]
+                path = HERE / 'offline_preparation.json'
+                path.write_text(json.dumps(report, indent=2) + '\n')
+                print(f"[offline] Automatic modes verified; battery {report['battery']}%. Disconnecting.")
         elif args.command == "events":
             ring.engage_data_plane()
             ring.data_flush()

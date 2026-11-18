@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('scan', 'pair', 'verify', 'battery', 'events', 'daemon')]
+    [ValidateSet('scan', 'pair', 'verify', 'battery', 'events', 'daemon', 'features', 'prepare-offline')]
     [string]$Command = 'scan',
     [switch]$FactoryResetDone,
     [string]$Address
@@ -20,7 +20,7 @@ try {
         if ($Address) { $env:OURA_ADDRESS = $Address }
         & $nativePython -u ring_daemon.py
     } else {
-        $nativeArgs = @('oura_bleak.py', $Command)
+        $nativeArgs = @('-u', 'oura_bleak.py', $Command)
         if ($FactoryResetDone) { $nativeArgs += '--factory-reset-done' }
         if ($Address) { $nativeArgs += @('--address', $Address) }
         & $nativePython @nativeArgs

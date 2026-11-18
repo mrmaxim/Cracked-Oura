@@ -165,6 +165,29 @@ class NativeTransportTests(unittest.TestCase):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_feature_mode_requires_ack_and_readback(self):
+        class Ring(OuraProtocol):
+            def request(self, data, **kwargs):
+                if data == bytes.fromhex('2f03220401'):
+                    return [(0x2f, bytes.fromhex('230400'), b'')]
+                if data == bytes.fromhex('2f022004'):
+                    return [(0x2f, bytes.fromhex('210401000000'), b'')]
+                raise AssertionError(data)
+        self.assertEqual(Ring().set_feature_mode(4, 1)['mode'], 1)
+
+    def test_rejected_measurement_mode_is_not_success(self):
+        ring = OuraProtocol()
+        ring.request = lambda *a, **kw: [(0x2f, bytes.fromhex('230401'), b'')]
+        with self.assertRaisesRegex(RuntimeError, 'rejected'):
+            ring.set_feature_mode(4, 1)
+
+    def test_feature_readback_mismatch_is_not_success(self):
+        ring = OuraProtocol()
+        ring.request = lambda *a, **kw: [(0x2f, bytes.fromhex('230400'), b'')]
+        ring.feature_status = lambda feature: {'mode': 0}
+        with self.assertRaisesRegex(RuntimeError, 'did not retain'):
+            ring.set_feature_mode(4, 1)
+
     def test_auth_proof_uses_nonce_and_wrong_key_is_rejected(self):
         class Ring(OuraProtocol):
             verbose = False
