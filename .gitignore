@@ -27,6 +27,8 @@ oura-downloads/
 # Secrets & device identity — NEVER commit
 ringlink/oura_key.hex
 ringlink/oura_key.hex.*
+ringlink/native_pairing.json
+ringlink/native_pairing.tmp
 ringlink/ring_bond.json
 ringlink/ring_addr.txt
 # Personal biometric data & runtime state

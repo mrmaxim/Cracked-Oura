@@ -149,13 +149,13 @@ def run_ring_session() -> int:
 
     Returns the number of event frames drained. Raises on any failure;
     the caller retries with a fresh driver."""
-    from oura_ring import OuraRing, pick_port, load_key  # slow import (driver)
-
-    ring = OuraRing(pick_port(None))
+    from oura_protocol import load_key
+    from ring_transport import create_ring
+    key = load_key()  # Validate before any connection (important after reset).
+    ring = create_ring()
     ring.open()
     try:
         ring.connect(seconds=15, attempts=2)
-        key = load_key()
         ring.authenticate(key)
         write_status("syncing", phase="connected", connected=True,
                      last_seen=now_iso())

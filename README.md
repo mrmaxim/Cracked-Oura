@@ -4,6 +4,10 @@
   <p><b>Read your Oura Ring 4 directly over Bluetooth LE — no account, no cloud, no subscription — and see everything in a local dashboard.</b></p>
 </div>
 
+Experimental native Windows Bluetooth support (without a Nordic dongle):
+see the [onboarding guide in Russian](ringlink/NATIVE-BLE-RU.md).
+Hardware pairing with this new backend still needs validation.
+
 ---
 
 This is **not** a plain fork of Cracked-Oura. It is a new project that combines

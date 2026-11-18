@@ -210,13 +210,14 @@ def main() -> int:
             try:
                 write_status("live", phase="connecting", connected=False,
                              last_error=None)
-                from oura_ring import OuraRing, pick_port, load_key
-                ring = OuraRing(pick_port(None))
+                from oura_protocol import load_key
+                from ring_transport import create_ring
+                key = load_key()  # Never consume a reset ring's first connection without a key.
+                ring = create_ring()
                 ring.open()
                 # Long scan windows are fine here: we are a daemon, and one
                 # catch = connected until the link drops.
                 ring.connect(seconds=25, attempts=4)
-                key = load_key()
                 ring.authenticate(key)
                 ring.engage_data_plane()
                 ring.sync_time()
