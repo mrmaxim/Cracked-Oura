@@ -6,7 +6,9 @@
 
 Experimental native Windows Bluetooth support (without a Nordic dongle):
 see the [onboarding guide in Russian](ringlink/NATIVE-BLE-RU.md).
-Hardware pairing with this new backend still needs validation.
+Initial pairing, app authentication, key persistence across reconnect, and
+battery reads were verified with a Ring 4 and Intel Wireless Bluetooth on
+Windows on 2026-11-18 (MTU 247). Long-running sync is still experimental.
 
 ---
 
