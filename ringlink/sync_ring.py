@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
 import time
 import traceback
@@ -26,6 +27,23 @@ LOCK_DIR = HERE / ".sync.lock"
 BATTERY_LOG = HERE / "battery_log.jsonl"
 EVENTS_FILE = HERE / "events.jsonl"
 CURSOR_FILE = HERE / "ring_cursor.txt"
+
+
+def release_sync_lock():
+    """OneDrive can set READONLY on a newly-created Windows lock directory."""
+    for attempt in range(6):
+        try:
+            LOCK_DIR.rmdir()
+            return
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if sys.platform == 'win32' and LOCK_DIR.exists():
+                attrs = LOCK_DIR.stat().st_file_attributes
+                if attrs & stat.FILE_ATTRIBUTE_READONLY:
+                    os.chmod(LOCK_DIR, stat.S_IWRITE)
+            time.sleep(.2 * (attempt + 1))
+    LOCK_DIR.rmdir()  # A real persistent failure must remain visible.
 
 # Full connect->drain cycles per sync run. Each failed cycle closes and
 # reopens the dongle driver (a wedged serial/dongle state after extended
@@ -183,11 +201,19 @@ def run_ring_session() -> int:
         def drain(start_ds: int) -> int:
             count = 0
             with EVENTS_FILE.open("a") as f:
+                def persisted_batch(cursor):
+                    # Acknowledge the ring / save a cursor only after the raw
+                    # frames have reached disk, including on interrupted syncs.
+                    f.flush()
+                    os.fsync(f.fileno())
+                    on_batch(cursor)
                 for tag, payload, raw in ring.drain_events(start_ds,
-                                                           on_batch=on_batch):
+                                                           on_batch=persisted_batch):
                     f.write(json.dumps({"ts": time.time(), "tag": tag,
                                         "raw": raw.hex()}) + "\n")
                     count += 1
+                f.flush()
+                os.fsync(f.fileno())
             return count
 
         # Incremental drain from the saved cursor (minus overlap) — keeps the
@@ -293,7 +319,7 @@ def main():
         return 1
     finally:
         try:
-            LOCK_DIR.rmdir()
+            release_sync_lock()
         except OSError:
             pass
 

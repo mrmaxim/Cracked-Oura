@@ -27,8 +27,10 @@ _default_ringlink = Path(__file__).resolve().parents[3] / "ringlink"
 RINGLINK = Path(os.environ.get("RINGLINK_DIR", str(_default_ringlink)))
 STATUS_FILE = RINGLINK / "ring_status.json"
 LOCK_DIR = RINGLINK / ".sync.lock"
-SYNC_SCRIPT = RINGLINK / "sync_ring.py"
-VENV_PY = RINGLINK / "venv310" / "Scripts" / "python.exe"
+_native_python = RINGLINK.parent / '.venv' / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
+TRANSPORT = os.environ.get('OURA_TRANSPORT', 'native' if _native_python.exists() else 'nordic')
+SYNC_SCRIPT = RINGLINK / ('offline_sync.py' if TRANSPORT == 'native' else 'sync_ring.py')
+VENV_PY = _native_python if TRANSPORT == 'native' else RINGLINK / 'venv310/Scripts/python.exe'
 
 # A healthy sync run now finishes in < 3 min (fail-fast connect cycles +
 # incremental drains). Beyond these windows the run is considered dead.

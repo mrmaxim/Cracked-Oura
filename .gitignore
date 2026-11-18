@@ -36,6 +36,7 @@ ringlink/ring_bond.json
 ringlink/ring_addr.txt
 # Personal biometric data & runtime state
 ringlink/events.jsonl
+ringlink/events.archive.jsonl
 ringlink/decoded_events.jsonl
 ringlink/battery_log.jsonl
 ringlink/ring_status.json

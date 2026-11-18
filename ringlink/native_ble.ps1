@@ -1,6 +1,6 @@
 param(
-    [ValidateSet('scan', 'pair', 'verify', 'battery', 'events', 'daemon', 'features', 'prepare-offline')]
-    [string]$Command = 'scan',
+    [ValidateSet('scan', 'pair', 'verify', 'battery', 'events', 'daemon', 'features', 'prepare-offline', 'sync', 'import')]
+    [string]$Command = 'sync',
     [switch]$FactoryResetDone,
     [string]$Address
 )
@@ -19,6 +19,11 @@ try {
         $env:OURA_TRANSPORT = 'native'
         if ($Address) { $env:OURA_ADDRESS = $Address }
         & $nativePython -u ring_daemon.py
+    } elseif ($Command -in @('sync', 'import')) {
+        $offlineArgs = @('-u', 'offline_sync.py')
+        if ($Command -eq 'import') { $offlineArgs += '--import-only' }
+        if ($Address) { $offlineArgs += @('--address', $Address) }
+        & $nativePython @offlineArgs
     } else {
         $nativeArgs = @('-u', 'oura_bleak.py', $Command)
         if ($FactoryResetDone) { $nativeArgs += '--factory-reset-done' }

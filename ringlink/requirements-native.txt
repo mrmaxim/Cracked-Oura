@@ -1,2 +1,4 @@
 bleak>=1.0,<4
 cryptography>=44
+sqlalchemy>=2,<3
+pandas>=2,<4

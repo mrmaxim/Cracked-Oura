@@ -15,6 +15,13 @@ def get_user_data_dir() -> Path:
     """
     app_name = "CrackedOura"
 
+    # Explicit override for isolated imports/tests and portable deployments.
+    # Do not silently fall back when the caller requested a particular store.
+    if os.environ.get("CRACKED_OURA_DATA_DIR"):
+        path = Path(os.environ["CRACKED_OURA_DATA_DIR"]).expanduser().resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     if sys.platform == "win32":
         path = Path(os.getenv("APPDATA")) / app_name
     elif sys.platform == "darwin":

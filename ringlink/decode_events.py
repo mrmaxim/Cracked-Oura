@@ -274,8 +274,9 @@ def _write_csv(path: Path, header: list[str], rows: list[list]):
     print(f"  wrote {path.name}: {len(rows)} row(s)")
 
 
-def cmd_export(events_path: Path, min_temp_c: float):
-    records = decode_all(resolve_times(load_records(events_path)))
+def cmd_export(events_path: Path, min_temp_c: float, records=None):
+    if records is None:
+        records = decode_all(resolve_times(load_records(events_path)))
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     # --- heartrate.csv: timestamp;bpm;source ---------------------------------
@@ -494,7 +495,8 @@ def rotate_events(events_path: Path = EVENTS_FILE):
 def cmd_ingest():
     venv_py = CRACKED / "backend" / "venv" / "Scripts" / "python.exe"
     if not venv_py.exists():
-        sys.exit(f"Cracked-Oura venv python not found: {venv_py}")
+        # Native BLE and database dependencies can share the repo's .venv.
+        venv_py = Path(sys.executable)
     if not EXPORT_ZIP.exists():
         sys.exit(f"run `export` first — {EXPORT_ZIP} missing")
     code = INGEST_SNIPPET.format(cracked=CRACKED, zip=EXPORT_ZIP)
