@@ -150,10 +150,10 @@ class NativeTransportTests(unittest.TestCase):
         self.assertIsNone(ring.thread)
 
     def test_multiple_rings_refuse_before_connect(self):
-        async def several(seconds):
+        async def several(*args):
             return [(object(), object()), (object(), object())]
         ring = native.NativeOuraRing()
-        with patch.object(native, 'discover', several), patch('bleak.BleakClient') as client:
+        with patch.object(native, 'discover_for_connection', several), patch('bleak.BleakClient') as client:
             with self.assertRaisesRegex(RuntimeError, 'Several'):
                 asyncio.run(ring._connect(1))
             client.assert_not_called()

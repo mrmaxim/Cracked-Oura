@@ -34,14 +34,63 @@ async def discover(seconds=10):
             or "oura" in (adv.local_name or device.name or "").lower()]
 
 
+def identity_file():
+    return native_key_file().parent / 'native_identity.json'
+
+
+def load_identity_address():
+    try:
+        value = json.loads(identity_file().read_text()).get('address')
+        return value if isinstance(value, str) and value else None
+    except (OSError, ValueError):
+        return None
+
+
+async def discover_for_connection(seconds, address=None, explicit=False, progress=None):
+    """Stop immediately on a known identity. Unknown targets need a full scan
+    to avoid selecting the first of several rings. Cache can recover after RPA
+    rotation, but an explicit user-supplied address is never substituted.
+    """
+    from bleak import BleakScanner
+    found = {}
+    matched = []
+    ready = asyncio.Event()
+
+    def detected(device, adv):
+        is_target = address and device.address.lower() == address.lower()
+        is_oura = (SERVICE in [u.lower() for u in adv.service_uuids]
+                   or 'oura' in (adv.local_name or device.name or '').lower())
+        if is_oura or is_target:
+            first = not found
+            found[device.address.lower()] = (device, adv)
+            if first and not address and progress:
+                progress.update('Кандидат найден; проверка других колец при первом поиске…')
+        if is_target:
+            matched[:] = [(device, adv)]
+            ready.set()
+
+    async with BleakScanner(detection_callback=detected):
+        try:
+            await asyncio.wait_for(ready.wait(), timeout=seconds)
+        except TimeoutError:
+            pass
+    if matched:
+        return matched
+    if address and explicit:
+        return []
+    return list(found.values())
+
+
 class NativeOuraRing(OuraProtocol):
     """Synchronous facade so the existing daemon can reuse its protocol loop.
 
     All Bleak objects live on one persistent asyncio thread. Blocking protocol
     requests wait on a thread-safe queue while notifications continue arriving.
     """
-    def __init__(self, address=None, verbose=False):
-        self.address = address
+    def __init__(self, address=None, verbose=False, progress=None):
+        self._explicit_address = bool(address)
+        self.address = address or load_identity_address()
+        self.progress = progress
         self.verbose = verbose
         self.conn = None
         self.rx = Queue()
@@ -93,15 +142,19 @@ class NativeOuraRing(OuraProtocol):
 
     async def _connect(self, seconds):
         from bleak import BleakClient
-        candidates = await discover(seconds)
-        if self.address:
-            candidates = [(d, a) for d, a in candidates
-                          if d.address.lower() == self.address.lower()]
+        if self.progress:
+            self.progress.set('Поиск кольца…')
+        scan_started = time.monotonic()
+        candidates = await discover_for_connection(seconds, self.address,
+                                                   self._explicit_address, self.progress)
+        self.last_scan_seconds = time.monotonic() - scan_started
         if not candidates:
             raise RuntimeError("Oura not found. Put it on the charger; disconnect the phone app.")
         if len(candidates) != 1:
             raise RuntimeError("Several Oura rings found. Use scan and specify --address.")
         device, _ = candidates[0]
+        if self.progress:
+            self.progress.set(f'Кольцо найдено за {self.last_scan_seconds:.2f} с. BLE-подключение и обнаружение сервисов…')
         client = BleakClient(device, pair=True, timeout=90,
                              disconnected_callback=self._disconnected)
         self.client = client
@@ -109,11 +162,34 @@ class NativeOuraRing(OuraProtocol):
             await client.connect()
             # OS performs MTU negotiation; do not copy BlueZ private MTU hacks.
             self.conn = device.address
+            if self.progress:
+                self.progress.set('Настройка BLE-уведомлений…')
             await client.start_notify(NOTIFY, self._notification)
-            print(f"[ble] Windows/native connected, MTU={client.mtu_size}")
+            message = f'BLE подключён, MTU={client.mtu_size}'
+            if self.progress:
+                self.progress.set(message)
+            else:
+                print(f'[ble] {message}', flush=True)
         except BaseException:
             await self._disconnect()
             raise
+
+    def authenticate(self, key):
+        super().authenticate(key)
+        # Cache only after this ring has proved it accepts our app key.
+        # Failed authorization / discovery cannot pin an unrelated device.
+        if self.conn:
+            try:
+                path = identity_file()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                temp = path.with_suffix('.tmp')
+                temp.write_text(json.dumps({'address': self.conn}) + '\n')
+                os.replace(temp, path)
+                if not self._explicit_address:
+                    self.address = self.conn
+            except OSError:
+                if self.progress:
+                    self.progress.update('Авторизация успешна; адрес для быстрого поиска сохранить не удалось')
 
     def connect(self, name_contains="Oura", seconds=25, attempts=1):
         for attempt in range(attempts):

@@ -162,7 +162,7 @@ def write_cursor(cursor: int):
     os.replace(tmp, CURSOR_FILE)
 
 
-def run_ring_session() -> int:
+def run_ring_session(progress=None) -> int:
     """One BLE session: connect -> auth -> battery -> time-sync -> drain.
 
     Returns the number of event frames drained. Raises on any failure;
@@ -170,11 +170,15 @@ def run_ring_session() -> int:
     from oura_protocol import load_key
     from ring_transport import create_ring
     key = load_key()  # Validate before any connection (important after reset).
-    ring = create_ring()
+    ring = create_ring(progress=progress)
     ring.open()
     try:
         ring.connect(seconds=15, attempts=2)
+        if progress:
+            progress.set('Авторизация кольца…')
         ring.authenticate(key)
+        if progress:
+            progress.set('Авторизация успешна. Подготовка истории…')
         write_status("syncing", phase="connected", connected=True,
                      last_seen=now_iso())
 
@@ -200,6 +204,10 @@ def run_ring_session() -> int:
 
         def drain(start_ds: int) -> int:
             count = 0
+            received_bytes = 0
+            last_progress = time.monotonic()
+            if progress:
+                progress.set('Выгрузка истории: 0 кадров, 0 КБ…')
             with EVENTS_FILE.open("a") as f:
                 def persisted_batch(cursor):
                     # Acknowledge the ring / save a cursor only after the raw
@@ -212,8 +220,14 @@ def run_ring_session() -> int:
                     f.write(json.dumps({"ts": time.time(), "tag": tag,
                                         "raw": raw.hex()}) + "\n")
                     count += 1
+                    received_bytes += len(raw)
+                    if progress and time.monotonic() - last_progress >= 2:
+                        progress.update(f'Выгрузка истории: {count} кадров, {received_bytes / 1024:.1f} КБ…')
+                        last_progress = time.monotonic()
                 f.flush()
                 os.fsync(f.fileno())
+            if progress:
+                progress.set(f'История получена: {count} кадров, {received_bytes / 1024:.1f} КБ')
             return count
 
         # Incremental drain from the saved cursor (minus overlap) — keeps the
@@ -230,11 +244,17 @@ def run_ring_session() -> int:
             write_cursor(0)
             n = drain(0)
         print(f"{n} event frame(s) drained")
+        if progress:
+            progress.set('Синхронизация часов…')
         ring.sync_time()  # keep ring clock anchored (enables 0x42 anchors)
         return n
     finally:
         try:
+            if progress:
+                progress.set('Отключение от кольца…')
             ring.close()
+            if progress:
+                progress.set('BLE-соединение закрыто')
         except Exception:
             pass
 
